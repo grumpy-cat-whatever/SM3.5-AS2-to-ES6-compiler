@@ -1,0 +1,8 @@
+/scripts-cmac/
+/dist/
+/dist-babel-plugin/
+/babel-plugin-implicit-this/
+/node_modules/
+/playground-babel-plugin/
+/.idea/
+/scripts-cmac/.idea/
