@@ -214,9 +214,6 @@ function parseBlockRec(startNode, string) {
                 } else {
                     counter++;
                     parent = node;
-                    if (parent.blocks === null) {
-                        console.log('troubleNode', node);
-                    }
                     node = {
                         statement: code[1],
                         level: counter,
@@ -228,10 +225,7 @@ function parseBlockRec(startNode, string) {
             } else if (code[2]) { //block statements open a block
                 counter++;
                 parent = node;
-                if (parent.blocks === null) {
-                    console.log('troubleNode', parent, code);
-                }
-                if (code[1]) {
+                if (code[1]) { //code between the last block and the current
                     node = {
                         statement: code[1],
                         level: counter,
@@ -240,7 +234,7 @@ function parseBlockRec(startNode, string) {
                     };
                     parent.blocks.push(node);
                 }
-                node = {
+                node = { //block statement itself, with empty child array
                     statement: code[2],
                     level: counter,
                     parent: parent,
@@ -273,9 +267,6 @@ function findBlockStatement(code) {
         return match;
     }
     if (match = /([\S\s]*)(function(\s+\w+)?\s*\([^)]*\)\s*)$/.exec(code)) {
-        return match;
-    }
-    if (match = /([\S\s]*)(if\s*\([^)]*\)\s*)$/.exec(code)) {
         return match;
     }
     return [code, code];
