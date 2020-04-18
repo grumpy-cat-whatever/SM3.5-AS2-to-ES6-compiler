@@ -1,8 +1,7 @@
 /scripts-cmac/
-/dist/
-/dist-babel-plugin/
-/babel-plugin-implicit-this/
+/dist
+!**/.eslintrc.js
 /node_modules/
-/playground-babel-plugin/
+/old_node_modules/
 /.idea/
 /scripts-cmac/.idea/

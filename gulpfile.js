@@ -1,8 +1,44 @@
 const { src, dest, task, series } = require('gulp');
 const del = require('del');
-const ren = require('gulp-rename');
+const rename = require('gulp-rename');
 const babel = require('gulp-babel');
 const gulp_replace = require('gulp-replace');
+const include = require('gulp-include');
+const through2 = require('through2');
+const debug = require('gulp-debug');
+let { parseBlock } = require('./naiveBlockParser.js')();
+const { collectInfo: babelCollectInfo, transform: babelTransform } = require('./implicitThis.js')();
+parseBlock = require('./BlockParser.js').parse;
+
+function nodeToString(node) {
+  var isEntryPoint = node.statement === "#entrypoint";
+  if (isEntryPoint) {
+      return node.blocks.map(nodeToString).join('');
+  } else if (node.blocks) {
+      return ( node.statement || '' ) + '{' + node.blocks.map(nodeToString).join('') + '}';
+  } else if(node.type === "LineComment") {
+    return '//' + node.comment;
+  } else if(node.type === "BlockComment") {
+    return '/*' + node.comment + '*/';
+  } else {
+    return node.statement || node.text;
+  }
+}
+
+function synchronize(){ //slightly ugly, but hopefully super fast
+  const array = [];
+  function transform(file, enc, cb){ //process chunks
+    this.push(file); //this === array, because of the .bind()
+    return cb(null, null); //remove from stream
+  }
+  function flush(cb){
+    for(let i = 0, arr = array, l = arr.length; i < l; i++) {
+      this.push(arr[i]); //add back to stream
+    }
+    cb();
+  }
+  return through2.obj(transform.bind(array), flush);
+}
 
 Function.prototype.pipeTo = function(target){
   var source = this;
@@ -11,8 +47,10 @@ Function.prototype.pipeTo = function(target){
   };
 };
 
-function clean(){
-  return del(['dist/**', '!dist']);
+function clean(...array){
+  return function(){
+    return del(array.concat('!**/.eslintrc.js'));
+  };
 }
 
 function copy(){
@@ -27,11 +65,11 @@ function toDist(){
   return dest('dist');
 }
 
-function rename(){
-  return ren({ extname: '.js' });
-}
-
-function lift(str){
+/* For testing gulp_replace directives. Usage:
+  >> es6.transformVarTyped(stringReplace("var a:Number = 1;"))
+  << 'var a = 1;'
+ */
+function stringReplace(str){
   return String.prototype.replace.bind(str);
 }
 
@@ -44,7 +82,7 @@ function escapeTokensInLineComments(replace){
 
 function escapeTokensInBlockComments(replace){
   replace = replace || gulp_replace;
-  return replace(/\/\*([^*/]|\*[^/]|[^*]\/)*\*\//g, function(match){
+  return replace(/[/][*]([^*/]|[*](?![/])|[/])*[*][/]/g, function(match){
     return match.replace(/[{}]/g, encodeURIComponent);
   });
 }
@@ -74,30 +112,8 @@ function shortenClassName(str){
   return str.replace(/^[\S\s]+[.]\s*(\S+)\s*$/, '$1');
 }
 
-const js = {
-  transformClassExtend: function jsTransformClassExtend(replace){
-    replace = replace || gulp_replace;
-    return replace(/class\s+([^{\s]*)\s+extends\s+([^{\s]*)\s+\{([\S\s]*)\}\s*$/g, function(match, g1, g2, g3){
-      var s1 = shortenClassName(g1),
-          s2 = shortenClassName(g2),
-          s3 = g3;
-      //     s3 = transformFunctionTyped(lift(g3));
-      // s3 = transformVarTyped(lift(s3));
-      return 'function ' + s1 + '(){}\n' + s1 + '.prototype = Object.assign(Object.create(' + s2 + '.prototype), {'
-              + s3
-             + '});';
-    });
-  },
-  transformClassSimple: function jsTransformClassSimple(replace){
-    replace = replace || gulp_replace;
-    return replace(/class\s+([A-Z][^\s{]*)\s*\{([\S\s]*)\}\s*$/, function(match, g1, g2){
-      var s1 = shortenClassName(g1),
-          s2 = g2;
-      //     s2 = transformFunctionTyped(lift(g2));
-      // s2 = transformVarTyped(lift(s2));
-      return 'function ' + s1 + '(){}\n' + s1 + '.prototype = {' + s2 + '}';
-    });
-  },
+//I had planned to write a TypeScript version also
+const es6 = {
   removeLocalNamespace(replace){
     replace = replace || gulp_replace;
     return replace(/Scripts\s*\.\s*Classes\s*\.\s*(\S+)/, '$1');
@@ -120,10 +136,7 @@ const js = {
       var argList = g2.replace(/(\w+)\s*:\s*\w+/g, '$1');
       return "function " + g1 + "(" + argList + ") {";
     });
-  }
-};
-
-const es6 = {
+  },
   transformClassExtend: function es6TransformClassExtend(replace){
     replace = replace || gulp_replace;
     return replace(/class\s+([^{\s]*)\s+extends\s+([^{\s]*)\s+\{([\S\s]*)\}\s*$/g, function(match, g1, g2, g3){
@@ -131,10 +144,10 @@ const es6 = {
           s2 = shortenClassName(g2),
           ast, s3;
       try {
-        ast = parseBlock(match.trim());
+        ast = parseBlock(match.trim()).blocks[0];
         s3 = ast.blocks.map(function(node){
           if(!node.blocks) {
-            return node.statement.replace(/(?<!\w)(var|const|let)\s/g, '');
+            return (node.statement || node.text || '').replace(/(?<!\w)(var|const|let)\s/g, '');
           } else {
             return nodeToString(Object.assign({}, node, {
               statement: node.statement.replace(/function\s+(\S+)\s*\(/, function(match_1, g1_1){
@@ -145,7 +158,9 @@ const es6 = {
         }).join('');
       } catch(e) {
         console.log('Parser failure: ', s1);
+        console.log(ast);
         s3 = g3;
+        throw e;
       }
       return 'class ' + s1 + ' extends ' + s2 + ' {' + s3 + '}';
     });
@@ -156,10 +171,10 @@ const es6 = {
       var s1 = shortenClassName(g1),
           ast, s2;
       try {
-        ast = parseBlock(match.trim());
+        ast = parseBlock(match.trim()).blocks[0];
         s2 = ast.blocks.map(function(node){
           if(!node.blocks) {
-            return node.statement.replace(/(var|const|let)\s*/g, '');
+            return (node.statement || node.text || '').replace(/(var|const|let)\s/g, '');
           } else {
             return nodeToString(Object.assign({}, node, {
               statement: node.statement.replace(/function\s+(\S+)\s*\(/, function(match_1, g1_1){
@@ -170,252 +185,120 @@ const es6 = {
         }).join('');
       } catch(e) {
         console.log('Parser failure: ', s1);
+        console.log(ast);
         s2 = g2;
+        throw e;
       }
       return 'class ' + s1 + ' {' + s2 + '}';
     });
   },
 };
 
-function parseBlock(string) {
-    const parsedEntrypoint = parseBlockRec({
-        statement: "#entrypoint",
-        level: 0,
-        parent: null,
-        blocks: []
-    }, string);
-    return parsedEntrypoint.blocks.length === 1 ? parsedEntrypoint.blocks[0]: parsedEntrypoint;
-}
-
-function logProblemClass(startNode, node){
-  var logStr = startNode.blocks[0].statement + startNode.blocks[1].statement;
-  logStr = logStr.replace(/\n|\r/g, '');
-  console.log('Problem Class: ', logStr);
-}
-
-function parseBlockRec(startNode, string) {
-    var node = startNode,
-        parent = startNode.parent,
-        counter = node.level,
-        tknzr = /([\S\s]*?)([{}])/g,
-        match,
-        code,
-        token;
-    /* eslint-disable no-cond-assign */
-    while (match = tknzr.exec(string)) {
-    /* eslint-enable no-cond-assign */
-        token = match[2];
-        code = match[1];
-        if (token === '{') {
-            code = findBlockStatement(code);
-            if (!code[2]) {
-                if (!node.blocks) {
-                    node.statement += code;
-                } else {
-                    counter++;
-                    parent = node;
-                    node = {
-                        statement: code[1],
-                        level: counter,
-                        parent: parent,
-                        blocks: []
-                    };
-                    parent.blocks.push(node);
-                }
-            } else if (code[2]) { //block statements open a block
-                counter++;
-                parent = node;
-                if (code[1]) { //code between the last block and the current
-                    node = {
-                        statement: code[1],
-                        level: counter,
-                        parent: parent,
-                        blocks: null
-                    };
-                    parent.blocks.push(node);
-                }
-                node = { //block statement itself, with empty child array
-                    statement: code[2],
-                    level: counter,
-                    parent: parent,
-                    blocks: [],
-                    recognized: true
-                };
-                parent.blocks.push(node);
-            }
-        } else if (token === '}') {
-            node.blocks.push({
-                statement: code,
-                level: counter + 1,
-                parent: node,
-                blocks: null
-            });
-            counter--;
-            node = parent;
-            parent = parent.parent;
-        }
-    }
-    return startNode;
-}
-
-var isWhiteSpace = RegExp.prototype.test.bind(/^\s*$/);
-
-function findBlockStatement(code) {
-    /* eslint-disable no-cond-assign */
-    var match;
-    if (match = /([\S\s]*)(class\s+\w+\s*)$/.exec(code)) {
-        return match;
-    }
-    if (match = /([\S\s]*)(function(\s+\w+)?\s*\([^)]*\)\s*)$/.exec(code)) {
-        return match;
-    }
-    return [code, code];
-    /* eslint-enable no-cond-assign */
-}
-
-function nodeToString(node) {
-    var isEntryPoint = node.statement === "#entrypoint";
-    if (isEntryPoint) {
-        return node.blocks.map(nodeToString).join('');
-    } else if (node.blocks) {
-        return node.statement + '{' + node.blocks.map(nodeToString).join('') + '}';
-    } else {
-        return node.statement;
-    }
-}
-
-function transformJs(){
+function transformAsToES6(){
   return getAsFiles()
-          .pipe(rename())
-          .pipe(removeLocalImports())
-          .pipe(removeFlashImports())
-          .pipe(js.transformPublicPrivate())
-          .pipe(js.transformStaticFunctions())
-          .pipe(js.transformVarTyped())
-          .pipe(js.transformFunctionTyped())
-          .pipe(js.transformClassExtend())
-          .pipe(js.transformClassSimple())
-          .pipe(js.removeLocalNamespace())
-          .pipe(toDist());
-}
-
-var [babelCollectInfo, babelTransform] = (function(){
-  function collectInfo(b){
-    var t = b.types;
-    return {
-      visitor: {
-        Class(cPath){
-          var cNode = cPath.node,
-              superClass = cNode.superClass,
-              theseClassVars = classVars[cNode.name] || {};
-          console.log("Visiting: class " + cNode.id.name);
-          classVars[cNode.name] = theseClassVars;
-          if(superClass){
-            classVars[superClass.name] = classVars[superClass.name] || {};
-            Object.setPrototypeOf(theseClassVars, classVars[superClass.name]);
-
-          }
-          cPath.traverse({
-            ClassMethod(path){
-              let node = path.node;
-              if(node.kind === 'method') {
-                theseClassVars[node.key.name] = true;
-                //console.log("this." + node.key.name + " = function(){ ... }");
-              }
-            },
-            ThisExpression(path){
-              let parentNode = path.parentPath.node;
-              if(t.isMemberExpression(parentNode)){
-                theseClassVars[parentNode.property.name] = true;
-              }
-            }
-          });
-        }
-      }
-    };
-  }
-  function transformImplicitThis(b){
-    var t = b.types;
-    return {
-      visitor: {
-        Class(cPath){
-          var cNode = cPath.node,
-              theseClassVars = classVars[cNode.name] || {};
-          // console.log(theseClassVars);
-          cPath.traverse({
-            Identifier(path){
-              let node = path.node,
-                  name = node.name,
-                  parentNode = path.parentPath.node;
-              if(!path.scope.hasBinding(name) && theseClassVars[name]) {
-                if(parentNode.object && t.isThisExpression(parentNode.object)){
-                  return; //don't transform this.x to this.this.x
-                }
-                if(!parentNode.computed && parentNode.property === node) {
-                  return; //don't transform foo.x to foo.this.x, but DO transform foo[x] to foo[this.x]
-                }
-                if(t.isClassMethod(parentNode)){
-                  return;
-                }
-
-                //console.log('class var ' + name + ' has no binding');
-                path.replaceWith(t.memberExpression(t.thisExpression(), node));
-              }
-            }
-          });
-        }
-      }
-    };
-  }
-  var classVars = {};
-  return [function() {
-    return babel({
-      plugins: [collectInfo]
-    });
-  }, function(){
-    return babel({
-      plugins: [transformImplicitThis]
-    });
-  }];
-})();
-
-function transformTs(){
-  return getAsFiles()
-          .pipe(ren({ extname: '.js' }))
-          .pipe(removeLocalImports())
-          .pipe(removeFlashImports())
-          .pipe(gulp_replace(/enum/g, '_enum'))
-          .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
-          .pipe(removeUnnecessaryDeletes())
-          .pipe(js.transformPublicPrivate())
-          // .pipe(js.transformStaticFunctions())
-          .pipe(js.transformVarTyped())
-          .pipe(js.transformFunctionTyped())
-          .pipe(escapeTokensInLineComments())
-          .pipe(escapeTokensInBlockComments())
-          .pipe(es6.transformClassExtend())
-          .pipe(es6.transformClassSimple())
-          .pipe(js.removeLocalNamespace())
-          .pipe(babelCollectInfo())
-          .pipe(gulp_replace(/^"use strict";\s+/, ''))
-          .pipe(toDist());
-}
-
-function transformBabel(){
-  return src("dist/**/*.js")
+    .pipe(gulp_replace(/#include\s+["']([^"']*)\.as["']/ig, '//=require $1.js'))
+    .pipe(rename({ extname: '.js' }))
+    .pipe(removeLocalImports())
+    .pipe(removeFlashImports())
+    .pipe(gulp_replace(/enum(?=\W)/g, '_enum')) //AS2 apparently allowed enum as an argument name
+    .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
+    .pipe(removeUnnecessaryDeletes())
+    .pipe(es6.transformPublicPrivate())
+    // .pipe(es6.transformStaticFunctions())
+    .pipe(es6.transformVarTyped())
+    .pipe(es6.transformFunctionTyped())
+    .pipe(escapeTokensInLineComments())
+    .pipe(escapeTokensInBlockComments())
+    .pipe(es6.transformClassExtend())
+    .pipe(es6.transformClassSimple())
+    .pipe(es6.removeLocalNamespace())
+    .pipe(babelCollectInfo())
+    .pipe(synchronize()) //ensures collection completes before transform begins
     .pipe(babelTransform())
-    .pipe(gulp_replace(/^"use strict";\s+/, ''))
-    .pipe(dest('dist'));
+    .pipe(moveIncludesToNewLine())
+    .pipe(dest('dist/es6'));
 }
+task('asToES6', series(clean('dist/es6/**', '!dist/es6'), transformAsToES6));
 
-task('clean', clean);
+function replaceNativeTsTypes(str){
+  return str.replace(/Boolean|Number|String/g, function(match){
+    return match.toLowerCase();
+  });
+}
+const ts = {
+  transformStaticKeyword(replace){
+    replace = replace || gulp_replace;
+    return replace(/static\s+(public|private)/g, '$1 static');
+  },
+  transformVarTyped(replace){
+    replace = replace || gulp_replace;
+    return replace(/(?<!\w)var\s+([^:\s]+)\s*:\s*([A-Z][A-Za-z.]*)/g, function(match, g1, g2){
+      return 'var ' + g1 + ': ' + replaceNativeTsTypes(g2);
+    });
+  },
+  transformFunctionTyped(replace){
+    replace = replace || gulp_replace;
+    return replace(/function\s*(\w+|\s*)\s*\(([^)]+|\s*)\)\s*(:\s*\S+|\s*)\s*\{/g, function(match, g1, g2, g3){
+      var argList = g2.replace(/(\w+)\s*:\s*\w+/g, '$1');
+      return "function " + g1 + "(" + argList + ")" + replaceNativeTsTypes(g3) + " {";
+    });
+  }
+};
+
+function transformAsToTs(){
+  return getAsFiles()
+    .pipe(gulp_replace(/#include\s+["']([^"']*)\.as["']/ig, '//=require $1.ts'))
+    .pipe(removeLocalImports())
+    .pipe(removeFlashImports())
+    .pipe(gulp_replace(/enum(?=\W)/g, '_enum')) //AS2 apparently allowed enum as an argument name
+    .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
+    .pipe(removeUnnecessaryDeletes())
+    .pipe(ts.transformStaticKeyword())
+    .pipe(es6.transformPublicPrivate())
+    .pipe(ts.transformVarTyped())
+    .pipe(ts.transformFunctionTyped())
+    .pipe(escapeTokensInLineComments())
+    .pipe(escapeTokensInBlockComments())
+    .pipe(es6.transformClassExtend())
+    .pipe(es6.transformClassSimple())
+    .pipe(es6.removeLocalNamespace())
+    .pipe(rename({ extname: '.ts' })) //makes babel recognize TypeScript code
+    .pipe(babelCollectInfo({ typescript: true }))
+    .pipe(synchronize()) //ensures collection completes before transform begins
+    .pipe(babelTransform({ typescript: true }))
+    .pipe(rename({ extname: '.ts' })) //override babel changes to file extension
+    .pipe(moveIncludesToNewLine())
+    .pipe(dest('dist/ts'));
+}
+task('asToTs', series(clean('dist/ts/**', '!dist/ts'), transformAsToTs));
+
+function moveIncludesToNewLine(replace){ //babel moves line comments from their own line onto the previous one
+  replace = replace || gulp_replace;     //retainLines fixes this, but causes other issues
+  return replace(/((?:\r\n|\r|\n).*\S+.*)\/\/=(include|require)/g, function(match, g1, g2){
+    return g1 + '\n//=' + g2;
+  });
+}
+function transformES6ToES5(){
+  return src("dist/es6/**/*.js")
+    .pipe(include())
+    .pipe(dest('dist/js'));
+}
+task('asToJs', series(
+  clean('dist/(es6|js)/**', '!dist/(es6|js)')
+  , transformAsToES6
+  , transformES6ToES5
+));
+task('include', function(){
+  return src("dist/**/*")
+         .pipe(include())
+         .pipe(dest('dist'));
+});
+task('clean', clean('dist/*/**', '!dist/*'));
 task('copy', copy);
-task('transformJs', transformJs);
-task('transformTs', transformTs);
-task('transformBabel', transformBabel);
 
 exports.default = series(
-                      clean
-                    , transformTs
-                    , transformBabel
+                      'clean'
+                    , transformAsToES6
+                    , transformES6ToES5
+                    , transformAsToTs
                   );
