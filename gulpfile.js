@@ -17,7 +17,7 @@ function nodeToString(node) {
   } else if (node.blocks) {
       return ( node.statement || '' ) + '{' + node.blocks.map(nodeToString).join('') + '}';
   } else if(node.type === "LineComment") {
-    return '//' + node.comment;
+    return '//' + node.comment + '\n';
   } else if(node.type === "BlockComment") {
     return '/*' + node.comment + '*/';
   } else {
@@ -70,7 +70,7 @@ function toDist(){
   << 'var a = 1;'
  */
 function stringReplace(str){
-  return String.prototype.replace.bind(str);
+  return Object.assign(String.prototype.replace.bind(str), { string: str });
 }
 
 function escapeTokensInLineComments(replace){
@@ -87,20 +87,20 @@ function escapeTokensInBlockComments(replace){
   });
 }
 
+function handleLineEndings(match, g1, g2){
+  return (!!g1 ^ !!g2) ? "" : g2 || g1 || "";
+}
+
 function removeUnnecessaryDeletes(replace){
   /* eslint-disable no-useless-escape */
   replace = replace || gulp_replace;
-  return replace(/(\r\n|\r|\n)?\s*delete\s+[^;\[\].]+;\s*(\r\n|\r|\n)?/g, function(match, g1, g2){
-    return (!!g1 ^ !!g2) ? "" : g2 || g1 || "";
-  });
+  return replace(/(\r\n|\r|\n)?\s*delete\s+[^;\[\].]+;\s*(\r\n|\r|\n)?/g, handleLineEndings);
   /* eslint-enable no-useless-escape */
 }
 
 function removeLocalImports(replace){
   replace = replace || gulp_replace;
-  return replace(/(\r\n|\r|\n)?import[^;]*Scripts\.Classes\.[^;]*;(\r\n|\r|\n)?/g, function(match, g1, g2){
-    return (!!g1 ^ !!g2) ? "" : g2 || g1 || "";
-  });
+  return replace(/(\r\n|\r|\n)?import[^;]*Scripts\.Classes\.[^;]*;(\r\n|\r|\n)?/g, handleLineEndings);
 }
 
 function removeFlashImports(replace){
@@ -112,7 +112,24 @@ function shortenClassName(str){
   return str.replace(/^[\S\s]+[.]\s*(\S+)\s*$/, '$1');
 }
 
-//I had planned to write a TypeScript version also
+function transformClassPropsMethods(className, classSourceCode){
+  var ast = parseBlock(classSourceCode).blocks[0];
+  return ast.blocks.map(function(node){
+    if(!node.blocks) {
+      if(node.comment) {
+        return nodeToString(node);
+      }
+      return nodeToString(node).replace(/(?<!\w)(var|const|let)\s/g, '');
+    } else {
+      return nodeToString(Object.assign({}, node, {
+        statement: (node.statement || '').replace(/function\s+(\S+)\s*\(/, function(match, g1){
+          return (g1 === className ? 'constructor' : g1) + '(';
+        })
+      }));
+    }
+  }).join('');
+}
+
 const es6 = {
   removeLocalNamespace(replace){
     replace = replace || gulp_replace;
@@ -126,11 +143,11 @@ const es6 = {
     replace = replace || gulp_replace;
     return replace(/static\s+function/g, 'function');
   },
-  transformVarTyped(replace){
+  transformVarTyped(replace){ //strips type annotations from variables
     replace = replace || gulp_replace;
     return replace(/(?<!\w)var\s+([^:\s]+)\s*:\s*[A-Z][A-Za-z.]*/g, 'var $1');
   },
-  transformFunctionTyped(replace){
+  transformFunctionTyped(replace){ //strips type annotations from functions
     replace = replace || gulp_replace;
     return replace(/function\s*(\w+|\s*)\s*\(([^)]+|\s*)\)\s*(:?\s*\S+|\s*)\s*\{/g, function(match, g1, g2, g3){
       var argList = g2.replace(/(\w+)\s*:\s*\w+/g, '$1');
@@ -139,59 +156,44 @@ const es6 = {
   },
   transformClassExtend: function es6TransformClassExtend(replace){
     replace = replace || gulp_replace;
-    return replace(/class\s+([^{\s]*)\s+extends\s+([^{\s]*)\s+\{([\S\s]*)\}\s*$/g, function(match, g1, g2, g3){
+    return replace(/^class\s+([^{\s]*)\s+extends\s+([^{\s]*)\s*\{([\S\s]*)\}$/g, function(match, g1, g2, g3){
       var s1 = shortenClassName(g1),
           s2 = shortenClassName(g2),
-          ast, s3;
-      try {
-        ast = parseBlock(match.trim()).blocks[0];
-        s3 = ast.blocks.map(function(node){
-          if(!node.blocks) {
-            return (node.statement || node.text || '').replace(/(?<!\w)(var|const|let)\s/g, '');
-          } else {
-            return nodeToString(Object.assign({}, node, {
-              statement: node.statement.replace(/function\s+(\S+)\s*\(/, function(match_1, g1_1){
-                return (g1_1 === g1 ? 'constructor' : g1_1) + '(';
-              })
-            }));
-          }
-        }).join('');
-      } catch(e) {
-        console.log('Parser failure: ', s1);
-        console.log(ast);
-        s3 = g3;
-        throw e;
-      }
+          s3 = transformClassPropsMethods(s1, match) || g3;
       return 'class ' + s1 + ' extends ' + s2 + ' {' + s3 + '}';
     });
   },
   transformClassSimple: function es6TransformClassSimple(replace){
     replace = replace || gulp_replace;
-    return replace(/class\s+([A-Z][^\s{]*)\s*\{([\S\s]*)\}\s*$/, function(match, g1, g2){
+    return replace(/^class\s+([A-Z][^\s{]*)\s*\{([\S\s]*)\}$/, function(match, g1, g2){
+      // console.log(replace.string.split('\n').slice(0,10).join('\n'));
       var s1 = shortenClassName(g1),
-          ast, s2;
-      try {
-        ast = parseBlock(match.trim()).blocks[0];
-        s2 = ast.blocks.map(function(node){
-          if(!node.blocks) {
-            return (node.statement || node.text || '').replace(/(var|const|let)\s/g, '');
-          } else {
-            return nodeToString(Object.assign({}, node, {
-              statement: node.statement.replace(/function\s+(\S+)\s*\(/, function(match_1, g1_1){
-                return (g1_1 === g1 ? 'constructor' : g1_1) + '(';
-              })
-            }));
-          }
-        }).join('');
-      } catch(e) {
-        console.log('Parser failure: ', s1);
-        console.log(ast);
-        s2 = g2;
-        throw e;
-      }
+          s2 = transformClassPropsMethods(s1, match) || g2;
       return 'class ' + s1 + ' {' + s2 + '}';
     });
   },
+  transformClasses: function(replace){
+    replace = replace || gulp_replace;
+    return replace(/^[\S\s]*class[\S\s]*$/, function(str){
+      var fileName = this.file.basename;
+      var ast;
+      try {
+        ast = parseBlock(str);
+      } catch(e) {
+        console.log('Parser failure: ', fileName);
+        throw e;
+      }
+      return !ast.blocks ? '' : ast.blocks.map(function(node){
+        var nodeStr = nodeToString(node);
+        if(node.type === "Class" && nodeStr) {
+          nodeStr = es6.transformClassExtend(stringReplace(nodeStr));
+          nodeStr = es6.transformClassSimple(stringReplace(nodeStr));
+          return nodeStr;
+        }
+        return nodeStr;
+      }).join('');
+    });
+  }
 };
 
 function transformAsToES6(){
@@ -201,16 +203,12 @@ function transformAsToES6(){
     .pipe(removeLocalImports())
     .pipe(removeFlashImports())
     .pipe(gulp_replace(/enum(?=\W)/g, '_enum')) //AS2 apparently allowed enum as an argument name
-    .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
     .pipe(removeUnnecessaryDeletes())
     .pipe(es6.transformPublicPrivate())
     // .pipe(es6.transformStaticFunctions())
     .pipe(es6.transformVarTyped())
     .pipe(es6.transformFunctionTyped())
-    .pipe(escapeTokensInLineComments())
-    .pipe(escapeTokensInBlockComments())
-    .pipe(es6.transformClassExtend())
-    .pipe(es6.transformClassSimple())
+    .pipe(es6.transformClasses())
     .pipe(es6.removeLocalNamespace())
     .pipe(babelCollectInfo())
     .pipe(synchronize()) //ensures collection completes before transform begins
@@ -251,16 +249,13 @@ function transformAsToTs(){
     .pipe(removeLocalImports())
     .pipe(removeFlashImports())
     .pipe(gulp_replace(/enum(?=\W)/g, '_enum')) //AS2 apparently allowed enum as an argument name
-    .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
+    // .pipe(gulp_replace(/(\w+) class/g, 'class $1'))
     .pipe(removeUnnecessaryDeletes())
     .pipe(ts.transformStaticKeyword())
     .pipe(es6.transformPublicPrivate())
     .pipe(ts.transformVarTyped())
     .pipe(ts.transformFunctionTyped())
-    .pipe(escapeTokensInLineComments())
-    .pipe(escapeTokensInBlockComments())
-    .pipe(es6.transformClassExtend())
-    .pipe(es6.transformClassSimple())
+    .pipe(es6.transformClasses())
     .pipe(es6.removeLocalNamespace())
     .pipe(rename({ extname: '.ts' })) //makes babel recognize TypeScript code
     .pipe(babelCollectInfo({ typescript: true }))

@@ -2,13 +2,16 @@
   function Node(node){
     return node;
   }
-  //yes, this is a cop-out, to keep the grammar dead simple
+  //yes, this is a cop-out, to keep the grammar simple(r)
   function splitStatement(node, text){
-      var m = text.match(/(class|function)\s+\w+.*$/),
+      var m = text.match(/(function(\s+\w+)?\s*\([^)]*\)\s*(:\s*\S+|\s*)\s*)$/),
       	  t;
       if(m) {
         node.statement = m[0];
-        t = text.slice(0, -m[0].length-1);
+        t = text.slice(0, -m[0].length);
+        if(m[1] === 'function') {
+          node.type = "Function";
+        }
       } else {
         t = text;
       }
@@ -62,21 +65,25 @@ block
   ;
 
 class
-  = 'class' _+ name:identifier _* 'extends' _* sup:namespace _* '{' nl:nodeList '}' {
+  = 'class' _+ name:namespace _* 'extends' _* sup:namespace _* '{' nl:nodeList '}' {
   	  return { type: 'Class', statement: 'class ' + name + ' extends ' + sup, blocks: nl };
     }
-  / 'class' _+ name:identifier _* '{' nl:nodeList '}' {
+  / 'class' _+ name:namespace _* 'extends' _* sup:namespace _* '{' '}' {
+  	  return { type: 'Class', statement: 'class ' + name + ' extends ' + sup };
+    }
+  / 'class' _+ name:namespace _* '{' nl:nodeList '}' {
   	  return { type: 'Class', statement: 'class ' + name, blocks: nl };
     }
-  / 'class' _+ name:identifier _* '{' '}' {
+  / 'class' _+ name:namespace _* '{' '}' {
   	  return { type: 'Class', statement: 'class ' + name };
     }
   ;
 namespace
-  = identifier _* '.' _* namespace
+  = $(identifier _* '.' _* namespace)
   / identifier
   ;
-identifier = $([A-Z_$]i [A-Z0-9_$]i*) ;
+identifier = $([A-Z_$]i alphanumeric*) ;
+alphanumeric = [A-Z0-9_$]i ;
 _ "whitespace" = [ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff];
 
 commentB
@@ -101,4 +108,9 @@ commentLText = $[^\n\r]+ ;
 
 lineEnding = $([\r][\n]) / [\r] / [\n] ;
 
-text = $( [^/{}] / '/' [^*])+ ;
+text = $(alphanumeric 'class' / (!terminals .) / string)+;
+
+string = '"' ( '\\\\' / '\\"' / [^"] )* '"'
+       / "'" ( '\\\\' / "\\'" / [^'] )* "'" ;
+
+terminals = 'class' / '{' / '}' / '/*' / '*/' / '//' / ["']
