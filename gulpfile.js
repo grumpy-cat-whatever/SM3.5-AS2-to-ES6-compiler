@@ -6,9 +6,8 @@ const gulp_replace = require('gulp-replace');
 const include = require('gulp-include');
 const through2 = require('through2');
 const debug = require('gulp-debug');
-let { parseBlock } = require('./naiveBlockParser.js')();
-const { collectInfo: babelCollectInfo, transform: babelTransform } = require('./implicitThis.js')();
-parseBlock = require('./BlockParser.js').parse;
+const { parse: parseBlock } = require('./BlockParser.js');
+const { collectInfo: babelCollectInfo, transform: babelTransform } = require('./implicitThis.js');
 
 function nodeToString(node) {
   var isEntryPoint = node.statement === "#entrypoint";
@@ -268,13 +267,20 @@ function transformAsToTs(){
 task('asToTs', series(clean('dist/ts/**', '!dist/ts'), transformAsToTs));
 
 function moveIncludesToNewLine(replace){ //babel moves line comments from their own line onto the previous one
-  replace = replace || gulp_replace;     //retainLines fixes this, but causes other issues
+  replace = replace || gulp_replace;     //retainLines fixes this, but used to cause other issues
   return replace(/((?:\r\n|\r|\n).*\S+.*)\/\/=(include|require)/g, function(match, g1, g2){
     return g1 + '\n//=' + g2;
   });
 }
 function transformES6ToES5(){
   return src("dist/es6/**/*.js")
+    .pipe(babel({
+      plugins: [
+        ["@babel/plugin-proposal-class-properties", {
+          loose: true
+        }]
+      ]
+    }))
     .pipe(include())
     .pipe(dest('dist/js'));
 }

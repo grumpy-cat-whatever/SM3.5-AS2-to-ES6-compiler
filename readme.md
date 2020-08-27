@@ -1,12 +1,12 @@
 # Resources for porting SM3.5 to EcmaScript/TypeScript
 
- I am abandoning my personal project to port SM3.5 to a web*-ish* platform. Since I've made significant progress, though, I've been polishing what I have - in preparation for this release - in the hopes that someone picks up where I left off.
+ I am abandoning my personal project to port SM3.5 to a web-*ish* platform. Since I've made significant progress, though, I've been polishing what I have - in preparation for this release - in the hopes that someone picks up where I left off.
 
 I'd personally still very much like to see this happen, but momentum in the community Discord has picked up for a re-imagining of SM in Unity (working title: SM4). These resources will primarily be of use in *porting* this game, *not* in making a new game from the ground up.
 
 **This is for developers, not for players. It is not a game, not even a demo (yet).**
 
-A while ago I started hatching a plan to port SM3.5 to a web*-ish* platform. My plan included the following steps:
+A while ago I started hatching a plan to port SM3.5 to a web-*ish* platform. My plan included the following steps:
 
 1. Convert the ActionScript 2 code base to something that compiles to JavaScript
 2. Replace all the Flash parts, i.e. Input/Output and Display APIs (like Stage and MovieClip, ...)
@@ -76,5 +76,5 @@ npm -g gulp-cli
 
 Afterwards you can run the following tasks:
 * `gulp asToES6`: Will convert the SM3.5 sources to ES6 sources and write them to `dist/es6/`. Babel compile targets will be ignored for this step. See the `asToJs` task to compile against specific platforms.
-* `gulp asToTs`: Will convert the SM3.5 sources to ES6 sources and write them to `dist/ts/`. Babel compile targets will be ignored for this step.
+* `gulp asToTs`: Will convert the SM3.5 sources to TypeScript sources and write them to `dist/ts/`. Babel compile targets will be ignored for this step.
 * `gulp asToJs`: Will convert the SM3.5 sources to ES6 sources, and compile those to ES5 depending on which "supported browsers" are configured (you can change the default easily; see @babel/preset-env).

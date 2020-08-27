@@ -1,4 +1,4 @@
-module.exports = function(){
+module.exports = (function(){
   function parseBlock(string) {
       return parseBlockRec({
         statement: "#entrypoint",
@@ -89,4 +89,4 @@ module.exports = function(){
   return {
     parseBlock: parseBlock,
   };
-};
+})();

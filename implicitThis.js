@@ -1,6 +1,6 @@
 const babel = require('gulp-babel');
 
-module.exports = function(){
+module.exports = (function(){
   let classVars = {};
 
   function createObjectWithClassName(className){
@@ -120,4 +120,4 @@ module.exports = function(){
       });
     }
   };
-};
+})();

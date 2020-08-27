@@ -78,13 +78,23 @@ class
   	  return { type: 'Class', statement: 'class ' + name };
     }
   ;
+
 namespace
   = $(identifier _* '.' _* namespace)
   / identifier
   ;
-identifier = $([A-Z_$]i alphanumeric*) ;
-alphanumeric = [A-Z0-9_$]i ;
-_ "whitespace" = [ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff];
+
+identifier
+  = $([A-Z_$]i alphanumeric*)
+  ;
+
+alphanumeric
+  = [A-Z0-9_$]i
+  ;
+
+_ "whitespace"
+  = [ \f\n\r\t\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]
+  ;
 
 commentB
   = '/*' c:commentBText '*/' {
@@ -94,6 +104,7 @@ commentB
       return Node({ type: 'BlockComment', comment: '' });
     }
   ;
+
 commentBText = $( [^*] / '*' [^/] )+ ;
 
 commentL
@@ -104,6 +115,7 @@ commentL
       return Node({ type: 'LineComment', comment: '' });
     }
   ;
+  
 commentLText = $[^\n\r]+ ;
 
 lineEnding = $([\r][\n]) / [\r] / [\n] ;

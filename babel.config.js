@@ -6,21 +6,17 @@ module.exports = function(api) {
     sourceType: "script",
     parserOpts: {
       allowReturnOutsideFunction: true,
-      //might be useful later
       plugins: ["classProperties", "classPrivateProperties"],
       errorRecovery: true
     },
-    //retainLines: true,
-    plugins: [
-      // ["@babel/plugin-proposal-class-properties", {
-      //   loose: true
-      // }]
-    ],
+    //retainLines: true, //can probably be enabled now
+    plugins: [],
     presets: [
       ["@babel/preset-env", {
         loose: true,
         targets: { //ignored when compiling to es6/typescript
-          electron: "8"
+          electron: "8",
+          ie: "11"
         },
         corejs: {
           version: 3,
