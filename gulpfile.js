@@ -6,8 +6,8 @@ const gulp_replace = require('gulp-replace');
 const include = require('gulp-include');
 const through2 = require('through2');
 const debug = require('gulp-debug');
-const { parse: parseBlock } = require('./BlockParser.js');
-const { collectInfo: babelCollectInfo, transform: babelTransform } = require('./implicitThis.js');
+const { parse: parseBlock } = require('./src/BlockParser/BlockParser.js');
+const { collectInfo: babelCollectInfo, transform: babelTransform } = require('./src/implicitThis.js');
 
 function nodeToString(node) {
   var isEntryPoint = node.statement === "#entrypoint";
@@ -57,7 +57,7 @@ function copy(){
 }
 
 function getAsFiles(){
-  return src('scripts-cmac/**/*.as');
+  return src('node_modules/sm-core/src/**/*.as');
 }
 
 function toDist(){
@@ -281,6 +281,7 @@ function transformES6ToES5(){
         }]
       ]
     }))
+    .pipe(moveIncludesToNewLine())
     .pipe(include())
     .pipe(dest('dist/js'));
 }

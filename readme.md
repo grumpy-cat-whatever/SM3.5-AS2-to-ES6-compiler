@@ -1,8 +1,8 @@
 # Resources for porting SM3.5 to EcmaScript/TypeScript
 
- I am abandoning my personal project to port SM3.5 to a web-*ish* platform. Since I've made significant progress, though, I've been polishing what I have - in preparation for this release - in the hopes that someone picks up where I left off.
+I have long since abandoned my personal project to port SM3.5 to a web-*ish* platform. Since I've made significant progress, though, I've been polishing what I have - in preparation for this release - in the hopes that someone picks up where I left off.
 
-I'd personally still very much like to see this happen, but momentum in the community Discord has picked up for a re-imagining of SM in Unity (working title: SM4). These resources will primarily be of use in *porting* this game, *not* in making a new game from the ground up.
+I'd personally still like to see this happen, but momentum in the community Discord has picked up for a re-imagining of SM in Unity (working title: SM4). These resources will primarily be of use in *porting* this game, *not* in making a new game from the ground up.
 
 **This is for developers, not for players. It is not a game, not even a demo (yet).**
 

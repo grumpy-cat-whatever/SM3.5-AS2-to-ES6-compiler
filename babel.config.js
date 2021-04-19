@@ -18,10 +18,6 @@ module.exports = function(api) {
           electron: "8",
           ie: "11"
         },
-        corejs: {
-          version: 3,
-          proposals: true
-        }
       }]
     ],
   };
