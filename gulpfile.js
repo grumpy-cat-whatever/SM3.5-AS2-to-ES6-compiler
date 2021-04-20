@@ -57,7 +57,11 @@ function copy(){
 }
 
 function getAsFiles(){
-  return src('node_modules/sm-core/src/**/*.as');
+  // yes, this is horrible. but it was the only solution I was able to get working
+  return src([
+    '../../node_modules/sm-core/src/**/*.as',
+    'node_modules/sm-core/src/**/*.as'
+  ]);
 }
 
 function toDist(){
