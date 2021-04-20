@@ -1,5 +1,12 @@
 # Resources for porting SM3.5 to EcmaScript/TypeScript
 
+> **License notice:**
+> This project is licensed under the [Apache 2.0 license](./LICENSE).
+> It provides automation tools for SM3.5 source files written in ActionScript 2 to be converted into more useful programming languages.
+>
+> The generated code, on the other hand, will most likely **retain the license of the original files**.
+> This notice is strictly informative, it is a layperson's interpretation of copyright law.
+
 I have long since abandoned my personal project to port SM3.5 to [the web platform](https://en.wikipedia.org/wiki/Web_platform).
 Since I've made significant progress, though, I've been polishing what I have - in preparation for this release - in the hopes that someone picks up where I left off.
 Certainly didn't help that I dropped off the face of the earth for about a year, though.
