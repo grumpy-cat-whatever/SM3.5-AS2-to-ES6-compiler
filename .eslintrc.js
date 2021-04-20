@@ -304,12 +304,12 @@ module.exports = {
       // temp: "writable",
       trace: "writable"
     },
-    parser: "babel-eslint",
+    parser: "@babel/eslint-parser",
     parserOptions: {
         ecmaVersion: 2018
     },
     plugins: [
-      "babel"
+      "@babel"
     ],
     rules: {
       // "no-undef": 0, //TEMPORARY
