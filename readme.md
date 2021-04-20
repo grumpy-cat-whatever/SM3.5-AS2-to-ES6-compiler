@@ -70,7 +70,8 @@ And there is always a very plausible risk that something got lost in translation
 > **Q:&nbsp;** Can this be used to port other AS2 projects to the web?
 
 **A:&nbsp;** Not out-of-the-box.
-There's some hacky code that was written specifically with SM3.5 in mind.
+Some of the code was written specifically with SM3.5 in mind.
+More importantly, the paths to the sources files are hardcoded in `gulpfile.js` (fork the repository to change them).
 But with some effort, it should be possible to adapt it to other projects.
 
 ## Getting started
