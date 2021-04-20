@@ -8,7 +8,7 @@
     "manual_install": "gulp"
   },
   "author": "idk_whatever",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@babel/cli": "^7.13.14",
     "@babel/core": "^7.13.15",
